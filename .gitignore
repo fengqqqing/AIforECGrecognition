@@ -1,0 +1,47 @@
+# Python bytecode/cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.conda/
+
+# Python tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# IDE-local files
+.idea/
+*.iml
+
+# Runtime outputs
+模型部署pyqt/ECGMonitor/runs/
+模型部署pyqt/ECGMonitor/models/archive/
+
+# Large training data and checkpoints
+artifacts/training/ecg/raw_data/
+artifacts/training/ecg/processed_data/
+artifacts/training/ecg/models/*.pth
+artifacts/training/ecg/models/*.pt
+!artifacts/training/ecg/models/contract_template.json
+
+# Keep curated files under artifacts/, but ignore accidental local temp files there
+artifacts/**/tmp/
+artifacts/**/*.log
+
+# OS/local noise
+.DS_Store
+Thumbs.db
+*.log

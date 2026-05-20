@@ -1,0 +1,39 @@
+{
+  "contract_version": 1,
+  "model_name": "best_acc",
+  "model_file": "best_acc.pt",
+  "framework": "torchscript",
+  "device": "cpu",
+  "input": {
+    "window_size": 2000,
+    "shape": ["B", 1, 2000],
+    "dtype": "float32"
+  },
+  "preprocessing": {
+    "normalization": "min_max",
+    "min_val": 1582.0,
+    "max_val": 2444.0
+  },
+  "output": {
+    "num_classes": 12,
+    "labels": [
+      "正常",
+      "RT室早",
+      "ST上移",
+      "ST下移",
+      "窦性房颤",
+      "窦性室颤",
+      "单发室早",
+      "窦性静止",
+      "二联律",
+      "房扑",
+      "房早",
+      "双重起搏"
+    ]
+  },
+  "provenance": {
+    "source_checkpoint": "",
+    "training_data": "",
+    "export_note": "当前契约由部署侧现有 config.py、example.py 和 ui_rules.py 事实盘点生成；来源 checkpoint 与训练指标当前未记录。"
+  }
+}

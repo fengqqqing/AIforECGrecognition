@@ -1,0 +1,39 @@
+{
+  "contract_version": 1,
+  "model_name": "",
+  "model_file": "",
+  "framework": "torchscript",
+  "device": "cpu",
+  "input": {
+    "window_size": 2000,
+    "shape": ["B", 1, 2000],
+    "dtype": "float32"
+  },
+  "preprocessing": {
+    "normalization": "min_max",
+    "min_val": null,
+    "max_val": null
+  },
+  "output": {
+    "num_classes": 12,
+    "labels": [
+      "正常",
+      "RT室早",
+      "ST上移",
+      "ST下移",
+      "窦性房颤",
+      "窦性室颤",
+      "单发室早",
+      "窦性静止",
+      "二联律",
+      "房扑",
+      "房早",
+      "双重起搏"
+    ]
+  },
+  "provenance": {
+    "source_checkpoint": "",
+    "training_data": "",
+    "export_note": ""
+  }
+}
