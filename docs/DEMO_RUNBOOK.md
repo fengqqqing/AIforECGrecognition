@@ -175,7 +175,7 @@ python 模型部署pyqt\ECGMonitor\offline_replay.py --samples 2000 --real-model
 
 如果 CLI 正常而 GUI 异常，重点检查 `ParamMonitor.py`、`offline_replay_worker.py` 和线程退出路径。
 
-## 6. 面试讲述顺序
+## 6. 对外演示说明顺序
 
 建议按下面顺序讲，避免把能力讲过头：
 
