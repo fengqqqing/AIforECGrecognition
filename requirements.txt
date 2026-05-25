@@ -1,0 +1,14 @@
+# Core demo/runtime dependencies
+PyQt5>=5.15,<6.0
+numpy>=1.23
+pandas>=1.5
+pyserial>=3.5
+torch>=2.0
+
+# Training/evaluation utilities used by scripts under 模型训练/ECG
+tqdm>=4.65
+matplotlib>=3.7
+scikit-learn>=1.2
+seaborn>=0.12
+wfdb>=4.1
+PyWavelets>=1.4

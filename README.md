@@ -1,20 +1,37 @@
 # ECG AI 辅助识别上位机 Demo
 
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)](https://www.python.org/)
+[![PyQt5](https://img.shields.io/badge/UI-PyQt5-41CD52.svg)](https://riverbankcomputing.com/software/pyqt/)
+[![TorchScript](https://img.shields.io/badge/Model-TorchScript-EE4C2C.svg)](https://pytorch.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 一个基于 PyQt5 和 TorchScript 的 ECG 辅助识别实验系统。当前版本聚焦部署侧 Demo 闭环：固定样例 ECG 离线回放、波形展示、心率/导联事件、模型辅助识别、运行指标和可追溯导出。
 
 > 说明：本项目输出只作为辅助提示和实验验证，不是临床独立诊断产品。
 
 ![Demo GUI](docs/assets/screenshots/demo-gui.png)
 
-## 一键运行
+## 快速开始
 
-Windows PowerShell：
+推荐环境：
+
+- Windows 10/11
+- Python 3.10+
+- PowerShell
+
+安装依赖：
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+一键启动固定 Demo：
 
 ```powershell
 .\run_demo.ps1
 ```
 
-或双击：
+也可以双击：
 
 ```text
 run_demo.bat
@@ -26,7 +43,9 @@ run_demo.bat
 python 模型部署pyqt\ECGMonitor\main.py --demo
 ```
 
-启动后会自动进入固定离线回放场景，无需手动选择样例数据。界面重点展示：
+启动后会自动进入固定离线回放场景，无需手动选择样例数据。
+
+## Demo 展示内容
 
 - 中央 ECG 波形主视图区。
 - 右侧 AI 辅助识别、心率、三导联单通道导联状态。
@@ -38,7 +57,7 @@ python 模型部署pyqt\ECGMonitor\main.py --demo
 维护者可从仓库根目录运行：
 
 ```powershell
-.\run_demo_checks.ps1
+powershell -ExecutionPolicy Bypass -File .\run_demo_checks.ps1
 ```
 
 该命令会依次检查：
@@ -105,15 +124,25 @@ python 模型部署pyqt\ECGMonitor\offline_replay.py --row 3 --samples 2000 --ev
   PyQt 上位机、串口采集、推理、离线回放、导出和测试
 
 docs/
-  PRD、技术设计、Demo runbook 和截图资产
+  PRD、技术设计、Demo runbook、模型契约、架构说明和截图资产
 ```
 
 更多细节见：
 
+- [架构总览](docs/ARCHITECTURE_OVERVIEW.md)
 - [Demo 运行手册](docs/DEMO_RUNBOOK.md)
+- [数据与模型说明](docs/DATA_AND_MODEL_NOTICE.md)
+- [公开仓库发布边界](docs/PUBLICATION_BOUNDARY.md)
 - [产品需求](docs/PRD.md)
 - [技术设计](docs/TECH_DESIGN.md)
+- [模型契约](docs/MODEL_CONTRACT.md)
 - [Agent 开发指南](docs/AGENT.md)
+
+## 公开仓库边界
+
+公开仓库保留一键 Demo 所需代码、文档、小体积样例数据和默认部署模型。完整原始数据、完整训练 CSV、训练 checkpoint、历史模型归档和运行输出不纳入公开发布分支。
+
+发布边界详见 [公开仓库发布边界](docs/PUBLICATION_BOUNDARY.md)，数据与模型边界详见 [数据与模型说明](docs/DATA_AND_MODEL_NOTICE.md)。
 
 ## 设计边界
 
