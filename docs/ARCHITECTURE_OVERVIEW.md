@@ -4,10 +4,10 @@
 
 ## 1. 当前定位
 
-当前项目是桌面端 ECG 辅助识别实验系统，重点是部署侧闭环：
+当前项目是桌面端 ECG 辅助识别实验系统，公开展示主线是训练侧到部署侧的闭环：
 
 ```text
-样例数据/串口输入 -> ECG 处理管线 -> 模型推理 -> GUI 展示 -> 运行导出 -> 离线回放验证
+训练数据 -> 模型训练 -> TorchScript 导出 -> 模型契约 -> 部署推理 -> ECG 处理管线 -> GUI Demo
 ```
 
 V1 不引入独立后端服务和数据库，不承诺临床独立诊断能力。
@@ -17,16 +17,19 @@ V1 不引入独立后端服务和数据库，不承诺临床独立诊断能力�
 ```mermaid
 flowchart LR
     subgraph Training["训练侧：模型训练与导出"]
-        RawData["原始/处理后 ECG 数据"]
-        TrainCode["训练脚本与模型定义"]
+        RawData["训练数据"]
+        DataProcess["数据处理与划分"]
+        TrainCode["CNN 模型训练与评估"]
         Checkpoint["训练 checkpoint"]
-        ExportModel["TorchScript 模型"]
-        ContractTemplate["模型契约模板"]
+        ExportModel["TorchScript 导出 best_acc.pt"]
+        ContractTemplate["契约模板 contract_template.json"]
+        ModelContract["部署契约 best_acc.contract.json"]
 
-        RawData --> TrainCode
+        RawData --> DataProcess
+        DataProcess --> TrainCode
         TrainCode --> Checkpoint
         Checkpoint --> ExportModel
-        ContractTemplate --> ModelContract["部署模型契约"]
+        ContractTemplate --> ModelContract
     end
 
     subgraph Deploy["部署侧：PyQt 上位机"]
@@ -34,14 +37,14 @@ flowchart LR
         SampleData["样例 CSV"]
         Replay["离线回放"]
         Pipeline["EcgProcessingPipeline"]
-        Predict["TorchScript 推理边界"]
-        Gui["ParamMonitor GUI"]
+        Predict["example.predict TorchScript 推理"]
+        Gui["ParamMonitor PyQt Demo"]
         Exporter["RunExporter"]
         Runs["metrics / diagnosis / replay"]
 
-        SerialInput --> Pipeline
         SampleData --> Replay
         Replay --> Pipeline
+        SerialInput --> Pipeline
         Pipeline --> Predict
         Predict --> Pipeline
         Pipeline --> Gui
@@ -53,6 +56,7 @@ flowchart LR
     ExportModel --> Predict
     ModelContract --> Predict
     ModelContract --> Gui
+    ModelContract --> Pipeline
 ```
 
 ## 3. 依赖方向

@@ -51,6 +51,8 @@ artifacts/training/ecg/processed_data/
 
 真实模型 smoke test 中的 `Diagnosis count: 1` 只表示部署推理链路可用，不代表模型医学准确率达标，也不能替代独立测试集评估。
 
+当前模型评估状态详见 [模型评估状态说明](MODEL_EVALUATION_STATUS.md)。该文档区分已知部署事实、未记录评估信息和后续应补指标。
+
 ## 4. 使用边界
 
 - 本项目是 ECG 辅助识别实验系统。

@@ -3,13 +3,30 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)](https://www.python.org/)
 [![PyQt5](https://img.shields.io/badge/UI-PyQt5-41CD52.svg)](https://riverbankcomputing.com/software/pyqt/)
 [![TorchScript](https://img.shields.io/badge/Model-TorchScript-EE4C2C.svg)](https://pytorch.org/)
+[![Demo](https://img.shields.io/badge/Demo-one--click-0F766E.svg)](docs/DEMO_RUNBOOK.md)
+[![Boundary](https://img.shields.io/badge/Boundary-AI%20assist%20only-64748B.svg)](docs/DATA_AND_MODEL_NOTICE.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-一个基于 PyQt5 和 TorchScript 的 ECG 辅助识别实验系统。当前版本聚焦部署侧 Demo 闭环：固定样例 ECG 离线回放、波形展示、心率/导联事件、模型辅助识别、运行指标和可追溯导出。
+一个覆盖训练侧与部署侧的 ECG AI 辅助识别桌面 Demo：训练侧负责 ECG 数据处理、CNN 模型训练/评估和 TorchScript 导出，部署侧负责固定样例回放、波形展示、模型辅助识别、运行指标和可追溯导出。
 
 > 说明：本项目输出只作为辅助提示和实验验证，不是临床独立诊断产品。
 
 ![Demo GUI](docs/assets/screenshots/demo-gui.png)
+
+固定样例回放场景下的 PyQt 工作台：中央显示 ECG 波形，右侧展示 AI 辅助识别、心率和导联状态，底部展示运行指标。
+
+## 项目主线
+
+```text
+ECG 数据处理与模型训练
+-> TorchScript 模型导出
+-> best_acc.contract.json 模型契约
+-> EcgProcessingPipeline 统一处理
+-> PyQt 桌面 Demo 展示
+-> 指标、诊断事件和可回放数据导出
+```
+
+访问者可以先运行一键 Demo 看到桌面端效果，再通过架构和模型说明了解训练侧如何交付给部署侧。
 
 ## 快速开始
 
@@ -31,7 +48,7 @@ python -m pip install -r requirements.txt
 .\run_demo.ps1
 ```
 
-也可以双击：
+或双击：
 
 ```text
 run_demo.bat
@@ -51,6 +68,18 @@ python 模型部署pyqt\ECGMonitor\main.py --demo
 - 右侧 AI 辅助识别、心率、三导联单通道导联状态。
 - 底部运行指标：包计数、诊断次数、单次推理耗时、吞吐量和事件计数。
 - 顶部操作入口：离线回放、回放设置、最近摘要、导出目录、重置显示。
+
+## 训练到部署闭环
+
+训练侧位于 `模型训练/ECG/`，当前公开说明覆盖以下能力：
+
+- 数据处理：通过数据处理、滤波和划分脚本生成训练、验证和测试输入。
+- 模型定义：`model.py` 定义当前 CNN 分类模型结构。
+- 训练与评估入口：`train.py`、`test.py` 和 `draw.py` 支撑训练、测试和曲线产物生成。
+- 模型导出：`pth_to_pt.py` 将训练侧权重导出为部署可加载的 TorchScript `.pt`。
+- 契约交付：部署侧通过 `best_acc.contract.json` 读取输入窗口、归一化参数和 12 分类标签顺序。
+
+当前公开 Demo 的真实模型 smoke test 只验证部署链路可用；模型准确率、类别级 recall/F1、混淆矩阵等评估结论需要后续以独立评估文档记录，不能由 smoke test 推断。
 
 ## 验证 Demo
 
@@ -86,12 +115,16 @@ python -m PyInstaller main.spec
 
 ## 核心亮点
 
-- 一键 Demo：`run_demo.ps1` / `run_demo.bat` 固定工作目录并启动 `python main.py --demo`。
-- 固定场景：`sample_data/test.csv` 第 4 行、2000 点窗口、稳定心率/导联事件。
-- 模型契约：`best_acc.contract.json` 管理输入窗口、归一化参数和 12 分类标签顺序。
-- 管线复用：CLI 回放、GUI 回放和串口 worker 共用 `EcgProcessingPipeline`。
-- 可追溯导出：每次运行导出 `metrics.jsonl`、`diagnosis.csv`、`ecg_replay.csv`。
-- 中文路径兼容：模型加载走二进制内存流，一键脚本避免硬编码中文目录字面量。
+| 亮点 | 说明 | 对应位置 |
+| --- | --- | --- |
+| 训练到部署闭环 | 训练侧覆盖数据处理、CNN 训练/评估入口和 TorchScript 导出，部署侧通过模型契约接收模型语义。 | [架构总览](docs/ARCHITECTURE_OVERVIEW.md) |
+| 模型契约化 | `best_acc.contract.json` 管理输入窗口、归一化参数和 12 分类标签顺序，避免 UI 和推理侧各自解释模型。 | [模型契约](docs/MODEL_CONTRACT.md) |
+| 管线复用 | CLI 回放、GUI 回放和串口 worker 共用 `EcgProcessingPipeline`，减少输入路径行为分叉。 | `模型部署pyqt/ECGMonitor/ecg_pipeline.py` |
+| 一键 Demo | `run_demo.ps1` / `run_demo.bat` 固定工作目录并启动 `python main.py --demo`。 | [Demo 运行手册](docs/DEMO_RUNBOOK.md) |
+| 可追溯导出 | 每次运行导出 `metrics.jsonl`、`diagnosis.csv`、`ecg_replay.csv`，便于复盘 Demo 过程。 | `模型部署pyqt/ECGMonitor/run_exporter.py` |
+| 真实模型 smoke | `run_demo_checks.ps1` 同时覆盖 mock 回放和真实 TorchScript 回放，保护部署链路。 | `run_demo_checks.ps1` |
+| 中文路径兼容 | 模型加载走二进制内存流，一键脚本避免硬编码中文目录字面量。 | `模型部署pyqt/ECGMonitor/example.py` |
+| 公开发布边界 | 公开分支保留可运行 Demo 必需资产，排除原始数据、完整训练 CSV、checkpoint 和运行输出。 | [公开仓库发布边界](docs/PUBLICATION_BOUNDARY.md) |
 
 ## 常用入口
 
@@ -127,16 +160,17 @@ docs/
   PRD、技术设计、Demo runbook、模型契约、架构说明和截图资产
 ```
 
-更多细节见：
+## 阅读路径
 
-- [架构总览](docs/ARCHITECTURE_OVERVIEW.md)
-- [Demo 运行手册](docs/DEMO_RUNBOOK.md)
-- [数据与模型说明](docs/DATA_AND_MODEL_NOTICE.md)
-- [公开仓库发布边界](docs/PUBLICATION_BOUNDARY.md)
-- [产品需求](docs/PRD.md)
-- [技术设计](docs/TECH_DESIGN.md)
-- [模型契约](docs/MODEL_CONTRACT.md)
-- [Agent 开发指南](docs/AGENT.md)
+| 想了解 | 推荐入口 |
+| --- | --- |
+| 运行 Demo | [Demo 运行手册](docs/DEMO_RUNBOOK.md) |
+| 训练侧到部署侧架构 | [架构总览](docs/ARCHITECTURE_OVERVIEW.md)、[技术设计](docs/TECH_DESIGN.md) |
+| 模型输入输出契约 | [模型契约](docs/MODEL_CONTRACT.md) |
+| 数据、模型和评估边界 | [数据与模型说明](docs/DATA_AND_MODEL_NOTICE.md)、[模型评估状态](docs/MODEL_EVALUATION_STATUS.md) |
+| 产品范围和非目标 | [产品需求](docs/PRD.md) |
+| 公开分支同步规则 | [公开仓库发布边界](docs/PUBLICATION_BOUNDARY.md) |
+| 协作开发约束 | [Agent 开发指南](docs/AGENT.md) |
 
 ## 公开仓库边界
 

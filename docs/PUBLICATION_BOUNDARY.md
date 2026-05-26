@@ -9,7 +9,7 @@
 | 分支 | 职责 | 发布方式 |
 | --- | --- | --- |
 | `main` | 本地完整开发主线，可保留训练侧历史和内部阶段文档。 | 不直接推送为 GitHub 公开主线。 |
-| `github-public` | GitHub 公开发布分支，只包含公开安全文件和可运行 Demo 资产。 | 使用 `git push origin HEAD:main` 发布到远端 `main`。 |
+| `github-public` | GitHub 公开发布分支，只包含公开安全文件和可运行 Demo 资产。 | 人工确认所有门禁通过后，才允许发布到远端 `main`。 |
 
 后续不要把 `main` 直接 merge 到 `github-public`。公开更新应从 `main` 选择性同步文件，例如：
 
@@ -17,8 +17,20 @@
 git switch github-public
 git checkout main -- README.md docs/PUBLICATION_BOUNDARY.md docs/DATA_AND_MODEL_NOTICE.md docs/ARCHITECTURE_OVERVIEW.md
 git status
-git push origin HEAD:main
 ```
+
+远端发布动作必须在人工确认发布清单、公开资产检查和必要 Demo 检查均通过后另行执行，不属于选择性同步示例，也不属于自动门禁脚本职责。
+
+当前公开仓库信息：
+
+```text
+Repo: fengqqqing/ecg-ai-monitor
+GitHub default branch: main
+Local public branch: github-public
+Remote URL: https://github.com/fengqqqing/ecg-ai-monitor.git
+```
+
+本地可能同时存在 `origin` 和 `ecg-ai-monitor` 两个 remote 名称，它们都应指向同一个公开仓库地址。后续发布前应先确认 remote，避免推送到旧仓库或错误仓库。
 
 ## 2. 公开仓库应包含
 
@@ -53,11 +65,21 @@ git push origin HEAD:main
 
 ## 5. 发布前检查
 
+发布前应优先阅读并执行 [公开发布门禁清单](PUBLIC_RELEASE_CHECKLIST.md)。该清单用于约束从 `main` 到 `github-public` 的选择性同步流程，不授权 AI 自动推送远端。
+
+本仓库提供只读检查脚本：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\check_public_release.ps1
+```
+
+该脚本只检查当前分支、remote、禁入追踪文件和公开文档中的私人语境关键词；不会执行 `git push`、`git merge`、删除、移动或历史清理。
+
 每次发布前至少执行：
 
 ```powershell
 git status --short --branch
-git ls-files | Select-String -Pattern "raw_data|processed_data|\.pth$|models/archive|ECGMonitor/runs|__pycache__|build/|dist/"
+git ls-files | Select-String -Pattern "raw_data|processed_data|\.pth$|artifacts/training/ecg/models/.*\.pt$|models/archive|ECGMonitor/runs|__pycache__|build/|dist/"
 $publicWordingPattern = [string]::Join("|", @("面" + "试", "求" + "职", "作品" + "集"))
 rg -n $publicWordingPattern README.md docs
 ```
