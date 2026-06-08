@@ -1,3 +1,7 @@
+# CNN 分类模型定义模块
+# 模型结构：4 层 1D 卷积（Conv1d + BatchNorm + ReLU + Pooling）+ 2 层全连接
+# 输入 shape: (B, 1, 2000)，输出: (B, 12) 对应 12 个心电分类。
+# 注意：输入窗口长度 2000 与部署侧模型契约一致，修改结构需同步更新部署侧。
 
 import torch
 from torch import nn
@@ -28,7 +32,7 @@ class CNNModel(nn.Module):
         self.fc2 = nn.Linear(128, 12)
 
     def forward(self, x):
-        # x shape: (B, 1, 2000)
+        # x shape: (B, 1, 2000) -> 4 层卷积 -> 展平 -> 2 层全连接 -> (B, 12)
         x = torch.relu(self.bn1(self.conv1(x)))  # 优化点：Tanh换成ReLU能缓解梯度消失
         x = self.pool1(x)
 

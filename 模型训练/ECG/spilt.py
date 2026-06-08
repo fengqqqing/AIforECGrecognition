@@ -1,3 +1,9 @@
+# 数据集划分脚本
+# 职责：读取 generate_data.py 生成的 data.csv，随机打乱后按 7:1:2 比例
+#       划分为训练集、验证集和测试集，保存为 train.csv / val.csv / test.csv。
+# 数据来源：artifacts/training/ecg/processed_data/data.csv
+# 注意：保存语句已注释，需手动取消注释后运行。
+
 #     # 打乱数据集并划分训练集、验证集和测试集
 
 

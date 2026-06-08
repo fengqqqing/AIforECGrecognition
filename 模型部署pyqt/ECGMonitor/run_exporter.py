@@ -1,3 +1,10 @@
+# 运行产物导出模块
+# 职责：在每次运行（串口采集或离线回放）中增量写入三类产物：
+#   - metrics.jsonl：指标快照（JSONL 格式，一行一个快照，便于增量写入和分析）
+#   - diagnosis.csv：诊断事件（CSV 格式，记录每次推理结果和对应指标）
+#   - ecg_replay.csv：可回放 ECG 波形（末尾附加最近一次诊断结果作为源标签）
+# 导出目录：runs/<timestamp>_<mode>/，如 runs/20260527_143000_serial/
+
 import csv
 import json
 import os
@@ -7,7 +14,10 @@ from config import EXPORT_POLICY
 
 
 class RunExporter:
+    """运行产物导出器：增量写入指标、诊断事件和 ECG 回放文件。"""
+
     def __init__(self, mode: str, policy=None):
+        """mode: "serial" 或 "offline"，用于目录命名和诊断记录。"""
         self._policy = dict(EXPORT_POLICY if policy is None else policy)
         self._enabled = self._policy.get("enabled", True)
         self._mode = mode
@@ -84,6 +94,7 @@ class RunExporter:
             writer.writerow(row)
 
     def finalize(self):
+        """运行结束时将采集到的 ECG 样本写入 ecg_replay.csv（单行 CSV，末尾附诊断标签）。"""
         if not self._enabled or self._replay_written or self._replay_path is None:
             return
         if not self._samples:

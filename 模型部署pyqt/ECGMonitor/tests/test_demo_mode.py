@@ -59,6 +59,7 @@ def _fake_window(**overrides):
     values.update(overrides)
     window = SimpleNamespace(**values)
     window._status_bar = status_bar
+    window.apply_ui_state = lambda state, detail="": ParamMonitor.apply_ui_state(window, state, detail)
     return window
 
 
@@ -88,6 +89,20 @@ class DemoModeTest(unittest.TestCase):
             "离线回放正在启动",
         )
 
+    def test_apply_ui_state_uses_product_copy_and_preserves_detail(self):
+        window = _fake_window()
+
+        copy = ParamMonitor.apply_ui_state(window, "demo_running", "固定场景 row=3 · 2000 点")
+
+        self.assertEqual(copy["badge"], "Demo 运行中")
+        self.assertEqual(copy["detail"], "固定场景 row=3 · 2000 点")
+        self.assertEqual(copy["hint"], "先确认波形、导联和心率，再查看 AI 辅助提示")
+        window.update_mode_banner.assert_called_once_with(
+            "Demo 运行中",
+            "固定场景 row=3 · 2000 点",
+            "先确认波形、导联和心率，再查看 AI 辅助提示",
+        )
+
     def test_start_demo_mode_blocks_when_precheck_failed(self):
         window = _fake_window(
             demo_ready=False,
@@ -100,6 +115,42 @@ class DemoModeTest(unittest.TestCase):
         self.assertFalse(window.start_offline_worker.called)
         window.show_demo_not_ready.assert_called_once_with("无法启动 Demo 演示")
 
+    def test_unavailable_feedback_updates_error_state(self):
+        window = _fake_window(demo_readiness_error="样例数据不存在: missing.csv")
+
+        with mock.patch("ParamMonitor.QMessageBox.warning"):
+            ParamMonitor.show_demo_not_ready(window, "无法启动 Demo 演示")
+
+        self.assertIn("无法启动 Demo 演示", window.statusStr)
+        window.update_mode_banner.assert_called_once_with(
+            "状态异常",
+            "Demo 预检未通过",
+            "请检查模型契约、模型文件、样例数据或回放配置",
+        )
+
+    def test_model_unavailable_feedback_updates_error_state(self):
+        window = _fake_window(last_error_message="模型契约标签数量不匹配")
+
+        with mock.patch("ParamMonitor.QMessageBox.warning"):
+            ParamMonitor.show_model_not_ready(window, "无法启动 Demo 真实模型演示")
+
+        self.assertIn("无法启动 Demo 真实模型演示", window.statusStr)
+        window.update_mode_banner.assert_called_once_with(
+            "状态异常",
+            "模型契约检查未通过",
+            "请检查模型契约、模型文件、样例数据或回放配置",
+        )
+
+    def test_reset_display_updates_empty_state_feedback(self):
+        window = _fake_window(reset_display_state=mock.Mock())
+        window.apply_ui_state = mock.Mock()
+
+        ParamMonitor.slot_resetDisplay(window)
+
+        window.reset_display_state.assert_called_once_with()
+        window.apply_ui_state.assert_called_once_with("reset")
+        self.assertEqual(window.statusStr, "显示已重置")
+
     def test_demo_status_and_summary_survive_natural_finish(self):
         exporter = _FakeExporter()
         window = _fake_window(run_exporter=exporter, demo_replay_active=True)
@@ -109,7 +160,7 @@ class DemoModeTest(unittest.TestCase):
         window.update_mode_banner.assert_called_with(
             "Demo 运行中",
             "固定场景 row=3 · 2000 点",
-            "离线回放进行中",
+            "先确认波形、导联和心率，再查看 AI 辅助提示",
         )
 
         ParamMonitor.on_offline_thread_finished(window)

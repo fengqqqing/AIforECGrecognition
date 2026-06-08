@@ -1,3 +1,7 @@
+# ECG Monitor 上位机入口模块
+# 职责：解析命令行参数、初始化日志和高 DPI 支持、启动 PyQt 主窗口。
+# 启动方式：python main.py [--demo]
+#   --demo 启动后自动进入固定场景的 Demo 离线回放（使用真实模型推理）。
 
 import argparse
 import logging

@@ -1,3 +1,9 @@
+# 离线回放 Qt Worker 模块
+# 职责：在 QThread 中运行离线回放，读取 CSV ECG 数据后逐点注入 EcgProcessingPipeline，
+#       并通过 Qt 信号将 ECG 采样、诊断结果、导联/心率事件转发给 ParamMonitor。
+# 与 CLI 版 offline_replay.py 的区别：本模块通过信号通信，适配 GUI 事件循环。
+# 共用逻辑：回放源解析（replay_utils）、管线处理（ecg_pipeline）。
+
 import logging
 import time
 
@@ -13,20 +19,24 @@ logger = logging.getLogger(__name__)
 
 
 def make_ecg_packet(value):
+    """构造 ECG 数据包（与 offline_replay.py 中的同名函数一致）。"""
     value = int(value)
     return [0x10, 0x02, (value >> 8) & 0xFF, value & 0xFF]
 
 
 def make_lead_packet(status):
+    """构造导联状态包。"""
     return [0x10, 0x03, int(status) & 0xFF]
 
 
 def make_hr_packet(hr):
+    """构造心率数据包。"""
     hr = int(hr)
     return [0x10, 0x04, (hr >> 8) & 0xFF, hr & 0xFF]
 
 
 class OfflineReplayWorker(QtCore.QObject):
+    """离线回放 Qt Worker：加载 CSV -> 逐点注入管线 -> 信号转发 -> 输出结果对照摘要。"""
     opened = QtCore.pyqtSignal(str)
     closed = QtCore.pyqtSignal()
     error = QtCore.pyqtSignal(str)

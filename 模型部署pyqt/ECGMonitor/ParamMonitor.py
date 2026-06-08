@@ -1,4 +1,13 @@
 ﻿# *_* coding : UTF-8 *_*
+# ECG Monitor 主窗口模块
+# 职责：作为 PyQt 上位机的 UI 协调层，负责：
+#   - 串口采集 Worker 和离线回放 Worker 的生命周期管理（启动/停止/重连）
+#   - ECG 实时波形绘制（QPainter 滚动式绘制）
+#   - 诊断结果、心率、导联状态、运行指标的 UI 展示
+#   - 导出目录管理、最近运行摘要展示
+#   - Demo 模式自动启动
+# 边界：不直接承担协议解析、模型加载和导出细节，这些由各自的模块负责。
+
 import logging
 import os
 import sys
@@ -31,11 +40,13 @@ from ui_theme import (
 )
 from ui_rules import (
     format_metrics_panel_values,
+    get_assistant_result_hint,
     get_diagnosis_label,
     get_diagnosis_style,
     get_heart_rate_style,
     get_lead_status_style,
     get_lead_status_text,
+    get_ui_state_copy,
     format_worker_metrics,
     is_lead_connected,
     should_display_heart_rate,
@@ -43,20 +54,22 @@ from ui_rules import (
 
 logger = logging.getLogger(__name__)
 
-THREAD_STOP_TIMEOUT_MS = 3000
-WAVE_GRID_MINOR_PX = 10
-WAVE_GRID_MAJOR_PX = 40
-WAVE_DEFAULT_BASELINE = 2048
-WAVE_DISPLAY_SCALE = 7
-WAVE_BASELINE_SMOOTHING = 0.25
+THREAD_STOP_TIMEOUT_MS = 3000     # Worker 线程停止等待超时（毫秒），超时后强制 terminate
+WAVE_GRID_MINOR_PX = 10           # 波形背景小网格间距（像素）
+WAVE_GRID_MAJOR_PX = 40           # 波形背景大网格间距（像素）
+WAVE_DEFAULT_BASELINE = 2048      # ECG 波形默认基线值（ADC 中间值）
+WAVE_DISPLAY_SCALE = 7            # ECG 采样值到像素的缩放因子
+WAVE_BASELINE_SMOOTHING = 0.25    # 基线平滑系数（EMA），避免波形上下跳动
 
 
 def resource_path(*parts):
+    """获取资源文件路径，兼容 PyInstaller 打包后的 _MEIPASS 临时目录。"""
     base_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_dir, *parts)
 
 
 class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
+    """ECG Monitor 主窗口：UI 事件调度、Worker 生命周期管理、波形绘制、状态展示。"""
     sendSerialData = QtCore.pyqtSignal(object)
 
     def __init__(self, demo_mode=False):
@@ -64,9 +77,10 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.setupUi(self)
         self.init()
 
-        self.mECG1WaveList = []
-        self.mECG1XStep = 0
-        self.waveDisplayBaseline = None
+        # --- 波形绘制状态 ---
+        self.mECG1WaveList = []  # ECG 采样点缓冲区，定时器取出并绘制
+        self.mECG1XStep = 0      # 波形绘制的 X 轴游标位置，到达右边界后归零（环形绘制）
+        self.waveDisplayBaseline = None  # 波形显示基线（EMA 平滑后的中位数）
         self.maxECG1Length = self.ecg1WaveLabel.width()
         self.maxECG1Height = self.ecg1WaveLabel.height()
         self.pixmapECG1 = QPixmap(self.ecg1WaveLabel.width(), self.ecg1WaveLabel.height())
@@ -75,6 +89,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.ecg1WaveLabel.setPixmap(self.pixmapECG1)
         self.ecg1WaveLabel.installEventFilter(self)
 
+        # --- Worker 生命周期状态 ---
         self.serial_thread = None
         self.serial_worker = None
         self.serial_running = False
@@ -82,21 +97,21 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.offline_worker = None
         self.offline_running = False
         self.offline_policy = dict(OFFLINE_REPLAY_POLICY)
-        self.last_serial_config = None
-        self.manual_disconnect = False
-        self.reconnect_pending = False
-        self.reconnect_attempts = 0
-        self.last_error_message = ""
-        self.current_metrics = {}
-        self.run_exporter = None
-        self.last_run_exporter = None
-        self.last_offline_summary = None
-        self.model_ready = False
-        self.demo_ready = False
-        self.demo_readiness = None
-        self.demo_readiness_error = ""
-        self.demo_mode = bool(demo_mode)
-        self.demo_replay_active = False
+        self.last_serial_config = None       # 上次串口配置，用于自动重连
+        self.manual_disconnect = False       # 用户手动断开时设为 True，阻止自动重连
+        self.reconnect_pending = False       # 标记是否需要自动重连
+        self.reconnect_attempts = 0          # 当前重连尝试次数
+        self.last_error_message = ""         # 最近一次错误信息
+        self.current_metrics = {}            # 当前运行指标快照
+        self.run_exporter = None             # 当前运行的导出器
+        self.last_run_exporter = None        # 上一次运行的导出器（用于"最近摘要"）
+        self.last_offline_summary = None     # 离线回放完成后的结果对照摘要
+        self.model_ready = False             # 模型契约检查是否通过
+        self.demo_ready = False              # Demo 预检是否通过
+        self.demo_readiness = None           # Demo 预检结果
+        self.demo_readiness_error = ""       # Demo 预检失败原因
+        self.demo_mode = bool(demo_mode)     # 是否以 Demo 模式启动
+        self.demo_replay_active = False      # Demo 回放是否正在运行
 
         try:
             warmup_model()
@@ -115,6 +130,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
                 QTimer.singleShot(0, self.start_demo_mode)
 
     def init(self):
+        """初始化 UI 交互：菜单栏、定时器、布局、主题、模式横幅。"""
         self.menu1 = QAction(self)
         self.menu1.setText('串口设置')
         self.menubar.addAction(self.menu1)
@@ -137,7 +153,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.setup_right_info_panel()
         self.setup_metrics_panel()
         apply_main_window_theme(self)
-        self.update_mode_banner("串口待机", "在线采集 / 离线回放可用", "辅助提示 · 非临床诊断")
+        self.apply_ui_state("idle")
         self.update_metrics_display({})
         self.heartRateLabel.setStyleSheet(get_heart_rate_style(0))
         self.heartRateTextLabel_2.setStyleSheet(get_lead_status_style(-1))
@@ -179,16 +195,18 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.topActionLayout.setSpacing(6)
 
         actions = (
-            ("replayActionButton", "离线回放", lambda: self.slot_offlineReplay()),
-            ("configActionButton", "回放设置", lambda: self.slot_offlineReplayConfig()),
-            ("summaryActionButton", "最近摘要", lambda: self.slot_showLatestSummary()),
-            ("exportActionButton", "导出目录", lambda: self.slot_openExportDir()),
-            ("resetActionButton", "重置显示", lambda: self.slot_resetDisplay()),
+            ("replayActionButton", "离线回放", "1. 启动离线回放，模拟一次 ECG 采集与初筛流程", lambda: self.slot_offlineReplay()),
+            ("configActionButton", "回放设置", "调整样本数、事件节奏和模型模式", lambda: self.slot_offlineReplayConfig()),
+            ("summaryActionButton", "最近摘要", "查看最近一次运行的摘要和结果对照", lambda: self.slot_showLatestSummary()),
+            ("exportActionButton", "导出目录", "打开 metrics、diagnosis 和 replay 导出目录", lambda: self.slot_openExportDir()),
+            ("resetActionButton", "重置显示", "清空当前展示，准备重新运行", lambda: self.slot_resetDisplay()),
         )
-        for name, text, handler in actions:
+        for name, text, tooltip, handler in actions:
             button = QPushButton(text, self.topActionFrame)
             button.setObjectName(name)
             button.setFixedHeight(28)
+            button.setToolTip(tooltip)
+            button.setStatusTip(tooltip)
             button.clicked.connect(handler)
             self.topActionLayout.addWidget(button)
             setattr(self, name, button)
@@ -337,6 +355,11 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
             state = "normal"
         self.modeBadgeLabel.setStyleSheet(get_mode_badge_style(state))
 
+    def apply_ui_state(self, state, detail=""):
+        copy = get_ui_state_copy(state, detail=detail)
+        self.update_mode_banner(copy["badge"], copy["detail"], copy["hint"])
+        return copy
+
     def setup_metrics_panel(self):
         self.metric_value_labels = {}
         self.metricsSummaryLabel.setStyleSheet(get_metrics_label_style())
@@ -404,6 +427,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.start_serial_worker(portNum, baudRate, dataBits, stopBits, parity)
 
     def start_serial_worker(self, portNum, baudRate, dataBits, stopBits, parity):
+        """启动串口采集 Worker：创建 QThread + SerialInferenceWorker，连接信号。"""
         if not self.model_ready:
             self.show_model_not_ready("无法启动串口真实推理")
             return
@@ -556,8 +580,10 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.reset_display_state()
         self.statusStr = "显示已重置"
         self.statusBar().showMessage(self.statusStr)
+        self.apply_ui_state("reset")
 
     def start_offline_worker(self):
+        """启动离线回放 Worker：创建 QThread + OfflineReplayWorker，连接信号。"""
         if self.offline_policy.get("use_real_model") and not self.model_ready:
             self.show_model_not_ready("无法启动真实模型回放")
             return
@@ -600,9 +626,9 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.statusStr = "Demo 演示启动中..." if self.demo_replay_active else "离线回放启动中..."
         self.statusBar().showMessage(self.statusStr)
         if self.demo_replay_active:
-            self.update_mode_banner("Demo 启动中", self.demo_policy_summary(), "离线回放正在启动")
+            self.apply_ui_state("demo_starting", self.demo_policy_summary())
         else:
-            self.update_mode_banner("离线回放启动中", "当前回放配置", "离线数据正在载入")
+            self.apply_ui_state("replay_starting")
 
     def start_demo_mode(self):
         if not self.demo_ready:
@@ -616,7 +642,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.demo_replay_active = True
         self.statusStr = "Demo 演示启动中..."
         self.statusBar().showMessage(self.statusStr)
-        self.update_mode_banner("Demo 启动中", self.demo_policy_summary(), "离线回放正在启动")
+        self.apply_ui_state("demo_starting", self.demo_policy_summary())
         self.start_offline_worker()
 
     def check_demo_readiness_at_startup(self):
@@ -624,14 +650,14 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
             self.demo_readiness = check_demo_readiness()
             self.demo_ready = True
             self.demo_readiness_error = ""
-            self.update_mode_banner("Demo 就绪", self.demo_policy_summary(), "预检通过 · 等待自动启动")
+            self.apply_ui_state("demo_ready", self.demo_policy_summary())
         except DemoReadinessError as exc:
             self.demo_ready = False
             self.demo_readiness = None
             self.demo_readiness_error = str(exc)
             self.statusStr = self.demo_readiness_error
             self.statusBar().showMessage(self.statusStr)
-            self.update_mode_banner("Demo 不可用", self.demo_policy_summary(), "预检失败 · 请检查资源")
+            self.apply_ui_state("error", "Demo 预检未通过")
             QMessageBox.warning(self, "Demo 预检失败", self.demo_readiness_error)
         except Exception as exc:
             self.demo_ready = False
@@ -639,7 +665,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
             self.demo_readiness_error = f"Demo 预检失败: {exc}"
             self.statusStr = self.demo_readiness_error
             self.statusBar().showMessage(self.statusStr)
-            self.update_mode_banner("Demo 不可用", self.demo_policy_summary(), "预检失败 · 请检查资源")
+            self.apply_ui_state("error", "Demo 预检未通过")
             QMessageBox.warning(self, "Demo 预检失败", self.demo_readiness_error)
 
     def show_demo_not_ready(self, action):
@@ -647,7 +673,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         message = f"{action}：{detail}"
         self.statusStr = message
         self.statusBar().showMessage(message)
-        self.update_mode_banner("Demo 不可用", self.demo_policy_summary(), "预检失败 · 请检查资源")
+        self.apply_ui_state("error", "Demo 预检未通过")
         QMessageBox.warning(self, "Demo 未就绪", message)
 
     def show_model_not_ready(self, action):
@@ -655,9 +681,11 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         message = f"{action}：{detail}"
         self.statusStr = message
         self.statusBar().showMessage(message)
+        self.apply_ui_state("error", "模型契约检查未通过")
         QMessageBox.warning(self, "模型未就绪", message)
 
     def stop_serial_worker(self, manual=True):
+        """停止串口采集 Worker：停止 worker -> 等待线程退出 -> 断开信号 -> finalize 导出。"""
         if manual:
             self.manual_disconnect = True
             self.reconnect_pending = False
@@ -692,9 +720,10 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
             self.run_exporter = None
         self.update_metrics_display({})
         if not self.offline_running:
-            self.update_mode_banner("串口待机", "在线采集 / 离线回放可用", "辅助提示 · 非临床诊断")
+            self.apply_ui_state("idle")
 
     def stop_offline_worker(self):
+        """停止离线回放 Worker：停止 worker -> 等待线程退出 -> finalize 导出。"""
         if self.offline_worker is not None:
             self.offline_worker.stop()
 
@@ -716,7 +745,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.run_exporter = None
         self.update_metrics_display({})
         if not self.serial_running and not self.demo_replay_active:
-            self.update_mode_banner("串口待机", "在线采集 / 离线回放可用", "辅助提示 · 非临床诊断")
+            self.apply_ui_state("idle")
 
     @QtCore.pyqtSlot(str)
     def on_serial_opened(self, port_name):
@@ -725,7 +754,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.reconnect_attempts = 0
         self.statusStr = f"串口已打开: {port_name}"
         self.statusBar().showMessage(self.statusStr)
-        self.update_mode_banner("串口运行中", port_name, "实时采集模式")
+        self.apply_ui_state("serial_running", port_name)
 
     @QtCore.pyqtSlot(str)
     def on_offline_opened(self, _source_name):
@@ -733,9 +762,9 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.statusStr = "Demo 演示进行中..." if self.demo_replay_active else "离线回放进行中..."
         self.statusBar().showMessage(self.statusStr)
         if self.demo_replay_active:
-            self.update_mode_banner("Demo 运行中", self.demo_policy_summary(), "离线回放进行中")
+            self.apply_ui_state("demo_running", self.demo_policy_summary())
         else:
-            self.update_mode_banner("离线回放运行中", "当前回放配置", "离线数据回放中")
+            self.apply_ui_state("replay_running")
 
     @QtCore.pyqtSlot()
     def on_serial_closed(self):
@@ -766,10 +795,10 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         if not self.serial_running:
             if demo_was_active:
                 self.statusStr = "Demo 演示已完成，可通过“最近运行摘要”查看导出结果"
-                self.update_mode_banner("Demo 已完成", self.demo_policy_summary(), "可查看最近运行摘要和导出文件")
+                self.apply_ui_state("demo_completed", self.demo_policy_summary())
             else:
                 self.statusStr = "离线回放已完成"
-                self.update_mode_banner("离线回放已完成", "当前回放配置", "可查看最近运行摘要和导出文件")
+                self.apply_ui_state("replay_completed")
             self.statusBar().showMessage(self.statusStr)
         self.demo_replay_active = False
         if self.last_offline_summary and self.last_offline_summary.get("used_real_model"):
@@ -848,6 +877,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.connectStateLabel_2.setText(label)
         self.connectStateLabel_2.setAlignment(Qt.AlignCenter)
         self.connectStateLabel_2.setStyleSheet(get_diagnosis_style(result))
+        self.assistantHintLabel.setText(get_assistant_result_hint(result))
         if self.run_exporter is not None:
             self.run_exporter.append_diagnosis(result, label, self.current_metrics)
 
@@ -872,6 +902,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.heartRateLabel.setStyleSheet(get_heart_rate_style(hr))
 
     def on_draw_wave(self):
+        """定时器回调（16ms）：缓冲区有足够数据时触发波形绘制。"""
         if len(self.mECG1WaveList) > UI_LIMITS["wave_draw_threshold"]:
             self.drawECG1Wave()
 
@@ -882,6 +913,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.draw_wave_background()
         self.ecg1WaveLabel.setPixmap(self.pixmapECG1)
         self.connectStateLabel_2.setText("")
+        self.assistantHintLabel.setText(get_assistant_result_hint(None))
         self.heartRateLabel.setText("--")
         self.heartRateLabel.setStyleSheet(get_heart_rate_style(0))
         self.heartRateTextLabel_2.setText("导联未知")
@@ -922,6 +954,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.painterEcg1.restore()
 
     def drawECG1Wave(self):
+        """核心波形绘制：清空旧区域 -> 逐点连线 -> 更新游标 -> 环形回绕。"""
         iCnt = len(self.mECG1WaveList)
         if iCnt >= self.maxECG1Length - self.mECG1XStep:
             rct = QRect(self.mECG1XStep, 0, self.maxECG1Length - self.mECG1XStep, self.maxECG1Height)
@@ -946,6 +979,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         self.ecg1WaveLabel.setPixmap(self.pixmapECG1)
 
     def update_wave_display_baseline(self, samples):
+        """计算波形显示基线：使用 EMA 平滑采样中位数，避免波形上下跳动。"""
         if not samples:
             return self.waveDisplayBaseline or WAVE_DEFAULT_BASELINE
 
@@ -960,6 +994,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         return self.waveDisplayBaseline
 
     def map_ecg_to_wave_y(self, value, baseline=None):
+        """将 ECG 采样值映射为波形 Y 坐标（像素），以基线为中心。"""
         if baseline is None:
             baseline = self.waveDisplayBaseline or WAVE_DEFAULT_BASELINE
         y = self.maxECG1Height / 2 - (value - baseline) / WAVE_DISPLAY_SCALE
@@ -976,6 +1011,7 @@ class ParamMonitor(QtWidgets.QMainWindow, Ui_MainWindow):
         return super().event(event)
 
     def closeEvent(self, a0: QtGui.QCloseEvent) -> None:
+        """窗口关闭时：停止所有定时器和 Worker，确保线程安全退出。"""
         self.waveDrawTimer.stop()
         self.heartShapeTimer.stop()
         self.reconnectTimer.stop()

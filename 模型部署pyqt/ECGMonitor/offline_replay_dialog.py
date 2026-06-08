@@ -1,3 +1,7 @@
+# 离线回放设置对话框模块
+# 职责：提供 GUI 表单让用户配置离线回放参数（数据源、样本数、事件节奏、
+#       模拟标签、帧间隔、导联/心率事件列表等），确认后返回更新后的 policy dict。
+
 from PyQt5 import QtWidgets
 
 from replay_utils import SOURCE_TYPE_LATEST_REPLAY, SOURCE_TYPE_TEST_CSV, parse_int_list
@@ -8,7 +12,10 @@ def _format_event_list(values):
 
 
 class OfflineReplayDialog(QtWidgets.QDialog):
+    """离线回放设置对话框：表单输入 -> 确认后返回 policy dict。"""
+
     def __init__(self, policy: dict, parent=None):
+        """policy: 当前回放策略 dict，对话框初始化时从其中加载默认值。"""
         super().__init__(parent)
         self._policy = dict(policy)
         self.setWindowTitle("离线回放设置")
@@ -106,6 +113,7 @@ class OfflineReplayDialog(QtWidgets.QDialog):
         self.mockLabelSpin.setEnabled(not self.realModelCheck.isChecked())
 
     def get_policy(self):
+        """返回用户配置后的回放策略 dict，供 ParamMonitor 启动回放使用。"""
         return {
             "source_type": self.sourceTypeCombo.currentData(),
             "input_csv": self.inputEdit.text().strip(),

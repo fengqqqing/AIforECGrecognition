@@ -1,3 +1,9 @@
+# 模型训练脚本
+# 职责：加载数据、min-max 归一化、训练 CNNModel、保存 checkpoint。
+# 关键参数：batch_size=128, lr=0.001, weight_decay=1e-4(L2正则化), epochs=100。
+# 归一化参数：min_val=1582, max_val=2444（需与部署侧 predict() 一致）。
+# 保存产物：best_acc.pth（最优）、last.pth（最新）、epoch_xx.pth（每 10 epoch）。
+
 import torch
 import numpy as np
 from torch import nn, optim
@@ -16,8 +22,8 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')   # GPU or CPU
     X_train, Y_train, X_val, Y_val = train_loadData_()                       # 加载数据集
 
-    min_val = np.array([1582])
-    max_val = np.array([2444])
+    min_val = np.array([1582])  # ECG 信号全局最小值（来自数据统计）
+    max_val = np.array([2444])  # ECG 信号全局最大值（来自数据统计）
     X_train = (X_train - min_val) / (max_val - min_val)
     X_val = (X_val - min_val) / (max_val - min_val)
 

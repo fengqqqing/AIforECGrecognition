@@ -1,9 +1,7 @@
-# *_* coding : UTF-8 *_*
-# 开发团队 ：乐育科技
-# 开发人员 ：zcq
-# 开发时间 ：2022/6/16 16:53
-# 文件名称 ：PackUnpack.PY 
-# 开发工具 ：PyCharm
+# 二进制数据包打包/解包模块
+# 协议格式：每包固定 10 字节，首字节为模块 ID（<0x80），第 2 字节为数据头，
+# 第 3-8 字节为 6 个数据字节（最高位置 1），第 9 字节为二级 ID，第 10 字节为校验和。
+# 解包状态机：先接收模块 ID（<0x80），再接收后续 9 字节，最后校验和验证。
 
 
 class PackUnpack:
@@ -42,6 +40,7 @@ class PackUnpack:
         pack[9] = (checkSum & 0xFF) | 0x80  # 取低八位，校验和的最高位也要置为1
 
     def unpackData(self, data):
+        """逐字节解包：状态机模式，先收模块 ID（<0x80），再收后续 9 字节，最后校验。"""
         findPack = False
         if self.sGotPackId:  # 已经接收到包ID
             if data >= 0x80:
@@ -65,6 +64,7 @@ class PackUnpack:
         return findPack
 
     def unpackWithCheckSum(self, listPack):
+        """校验和验证：累加所有字节的低 7 位，与末字节低 7 位比对。"""
         if len(listPack) != 10:  # 包长度不为10，返回false
             return False
         checkSum = listPack[0]   # 取出模块ID，加到校验和

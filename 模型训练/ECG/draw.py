@@ -1,3 +1,7 @@
+# 训练可视化模块
+# 职责：提供 ECG 信号绘制、混淆矩阵热力图绘制和训练曲线（loss/acc）保存。
+# 调用方：train.py（训练曲线）、test.py（混淆矩阵和 ROC）。
+
 import numpy as np
 import seaborn
 import matplotlib.pyplot as plt

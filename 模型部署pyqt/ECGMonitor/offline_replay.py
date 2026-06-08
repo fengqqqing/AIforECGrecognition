@@ -1,3 +1,10 @@
+# 离线回放 CLI 入口模块
+# 职责：从命令行运行离线回放，读取 CSV 中的 ECG 数据，
+#       通过 EcgProcessingPipeline 执行 mock 或真实模型推理，输出回放结果。
+# 用法：python offline_replay.py [--input CSV] [--latest] [--row N] [--samples N]
+#       [--real-model] [--mock-label N] [--lead-events 0,1,0] [--hr-events 72,88,65]
+# 注意：与 GUI 回放共用 replay_utils 中的回放源解析逻辑。
+
 import argparse
 import time
 
@@ -9,15 +16,18 @@ from replay_utils import load_replay_source, parse_int_list, resolve_replay_inpu
 
 
 def make_ecg_packet(value):
+    """构造 ECG 数据包：包头 0x10，子类型 0x02，高 8 位 + 低 8 位合成采样值。"""
     value = int(value)
     return [0x10, 0x02, (value >> 8) & 0xFF, value & 0xFF]
 
 
 def make_lead_packet(status):
+    """构造导联状态包：包头 0x10，子类型 0x03。"""
     return [0x10, 0x03, int(status) & 0xFF]
 
 
 def make_hr_packet(hr):
+    """构造心率数据包：包头 0x10，子类型 0x04，高 8 位 + 低 8 位合成心率值。"""
     hr = int(hr)
     return [0x10, 0x04, (hr >> 8) & 0xFF, hr & 0xFF]
 

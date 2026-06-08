@@ -1,3 +1,11 @@
+# Demo 预检模块
+# 职责：在启动 Demo 模式前验证所有必要资源是否就绪：
+#   - 模型契约文件是否存在且有效
+#   - 模型文件是否存在
+#   - 样例数据文件是否存在且可读
+#   - 回放参数（samples、event_interval 等）是否合法
+# 预检失败时抛出 DemoReadinessError，包含所有问题列表。
+
 import os
 
 from config import DEMO_REPLAY_POLICY, MODEL_CONTRACT_PATH
@@ -6,6 +14,8 @@ from replay_utils import load_replay_source, resolve_replay_path_from_policy
 
 
 class DemoReadinessError(RuntimeError):
+    """Demo 预检失败异常，problems 列表包含所有检查失败的原因。"""
+
     def __init__(self, problems):
         self.problems = list(problems)
         super().__init__("Demo 预检失败:\n- " + "\n- ".join(self.problems))

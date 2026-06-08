@@ -13,6 +13,7 @@ from PyQt5 import QtCore, QtWidgets
 
 from demo_readiness import DemoReadinessError
 from ParamMonitor import ParamMonitor
+from ui_rules import get_assistant_result_hint
 from ui_theme import ECG_MONITOR_THEME
 
 
@@ -29,7 +30,7 @@ LAYOUT_STATE_SCENARIOS = (
         "name": "standby_unknown_empty_metrics",
         "badge": "串口待机",
         "detail": "在线采集 / 离线回放可用",
-        "hint": "辅助提示 · 非临床诊断",
+        "hint": "辅助提示 · 等待信号输入",
         "heart_rate": 0,
         "lead_status": None,
         "metrics": {},
@@ -38,7 +39,7 @@ LAYOUT_STATE_SCENARIOS = (
         "name": "demo_running_connected_metrics",
         "badge": "Demo 运行中",
         "detail": "固定场景 row=3 · 2000 点",
-        "hint": "离线回放进行中",
+        "hint": "先确认波形、导联和心率，再查看 AI 辅助提示",
         "heart_rate": 65,
         "lead_status": 0,
         "metrics": {
@@ -340,12 +341,17 @@ def main():
             assert [action.text() for action in window.menubar.actions()] == ["串口设置", "退出"]
             assert "串口待机" in window.modeBadgeLabel.text()
             assert "离线回放" in window.demoPolicyLabel.text()
-            assert "非临床诊断" in window.modeHintLabel.text()
+            assert "等待信号输入" in window.modeHintLabel.text()
             assert window.replayActionButton.text() == "离线回放"
             assert window.configActionButton.text() == "回放设置"
             assert window.summaryActionButton.text() == "最近摘要"
             assert window.exportActionButton.text() == "导出目录"
             assert window.resetActionButton.text() == "重置显示"
+            assert "采集与初筛流程" in window.replayActionButton.toolTip()
+            assert "样本数" in window.configActionButton.toolTip()
+            assert "最近一次运行" in window.summaryActionButton.toolTip()
+            assert "metrics" in window.exportActionButton.toolTip()
+            assert "重新运行" in window.resetActionButton.toolTip()
             assert not hasattr(window, "metricsLabel")
             assert window.helpButton.text() == "说明"
             assert_runtime_icons_loaded(window)
@@ -389,13 +395,19 @@ def main():
             assert pixel_color_name(window.pixmapECG1, 5, 5) == ECG_MONITOR_THEME["colors"]["wave_background"]
             assert pixel_color_name(window.pixmapECG1, 40, 5) == ECG_MONITOR_THEME["colors"]["wave_grid"]
             assert window.heartRateTextLabel_3.text() == "AI 辅助识别"
-            assert window.assistantHintLabel.text() == "仅作辅助提示"
+            assert window.assistantHintLabel.text() == get_assistant_result_hint(None)
             assert "临床诊断" not in window.assistantHintLabel.text()
 
             window.on_diagnosis(0)
             assert window.connectStateLabel_2.text() == "正常"
+            assert window.assistantHintLabel.text() == get_assistant_result_hint(0)
             assert ECG_MONITOR_THEME["colors"]["normal"] in window.connectStateLabel_2.styleSheet()
             assert "border-radius" in window.connectStateLabel_2.styleSheet()
+
+            window.on_diagnosis(1)
+            assert window.assistantHintLabel.text() == get_assistant_result_hint(1)
+            assert "医生复核" in window.assistantHintLabel.text()
+            assert "临床诊断" not in window.assistantHintLabel.text()
 
             window.on_lead_status(0)
             assert window.heartRateTextLabel_2.text() == "导联连接"
@@ -468,10 +480,13 @@ def main():
                 window.resetActionButton.click()
                 assert reset_slot.called
 
-            window.reset_display_state()
+            window.slot_resetDisplay()
+            assert window.modeBadgeLabel.text() == "显示已重置"
+            assert window.modeHintLabel.text() == "辅助提示 · 等待新的信号输入"
             assert window.heartRateLabel.text() == "--"
             assert window.heartRateTextLabel_2.text() == "导联未知"
             assert window.connectStateLabel_2.text() == ""
+            assert window.assistantHintLabel.text() == get_assistant_result_hint(None)
             assert ECG_MONITOR_THEME["colors"]["unknown"] in window.heartRateLabel.styleSheet()
             assert ECG_MONITOR_THEME["colors"]["unknown"] in window.heartRateTextLabel_2.styleSheet()
             assert window.metricsSummaryLabel.text() == "运行指标: 未开始"
@@ -569,8 +584,9 @@ def main():
             assert warning.called
             assert "Demo 预检失败" in warning.call_args.args[1]
             assert warning.call_count == 1
-            assert "Demo 不可用" in demo_failed_window.modeBadgeLabel.text()
-            assert "预检失败" in demo_failed_window.modeHintLabel.text()
+            assert demo_failed_window.modeBadgeLabel.text() == "状态异常"
+            assert demo_failed_window.demoPolicyLabel.text() == "Demo 预检未通过"
+            assert "请检查模型契约" in demo_failed_window.modeHintLabel.text()
         finally:
             demo_failed_window.close()
             app.processEvents()

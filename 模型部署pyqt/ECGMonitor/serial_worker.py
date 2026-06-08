@@ -1,3 +1,10 @@
+# 串口采集 Worker 模块
+# 职责：在 QThread 中运行，负责串口打开、逐字节读取、二进制解包（PackUnpack）、
+#       将解包后的数据包交给 EcgProcessingPipeline 处理，并通过 Qt 信号转发结果。
+# 线程安全：_running 标志控制循环退出；stop() 由主线程调用触发停止。
+# 信号：opened/closed/error/ecg_sample/diagnosis/lead_status/heart_rate/metrics_updated。
+# 边界：_process_packet 仅为 worker 内部薄包装，离线回放不得通过此方法复用逻辑。
+
 import copy
 import logging
 import time
@@ -16,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class SerialInferenceWorker(QtCore.QObject):
+    """串口采集 Worker：串口读取 -> 二进制解包 -> ECG管线处理 -> Qt信号转发。"""
     opened = QtCore.pyqtSignal(str)
     closed = QtCore.pyqtSignal()
     error = QtCore.pyqtSignal(str)
@@ -33,9 +41,9 @@ class SerialInferenceWorker(QtCore.QObject):
         self._stop_bits = stop_bits
         self._parity = parity
 
-        self._running = False
+        self._running = False  # 控制 run() 循环的标志位，stop() 设为 False 后退出
         self._serial: Optional[serial.Serial] = None
-        self._unpacker = PackUnpack()
+        self._unpacker = PackUnpack()  # 二进制协议解包器
         self._window_size = load_model_contract(MODEL_CONTRACT_PATH)["input"]["window_size"]
         self._pipeline = EcgProcessingPipeline(
             window_size=self._window_size,
@@ -52,6 +60,7 @@ class SerialInferenceWorker(QtCore.QObject):
 
     @QtCore.pyqtSlot()
     def run(self):
+        """Worker 主循环：打开串口 -> 逐字节读取 -> 解包 -> 交给管线处理。"""
         try:
             self._serial = serial.Serial(
                 port=self._port,
@@ -79,6 +88,7 @@ class SerialInferenceWorker(QtCore.QObject):
 
                 for byte in data:
                     if self._unpacker.unpackData(byte):
+                        # 解包完成，deepcopy 避免后续修改影响已解包数据
                         packet = copy.deepcopy(self._unpacker.getUnpackRslt())
                         self._process_packet(packet)
         except Exception as exc:
@@ -102,6 +112,7 @@ class SerialInferenceWorker(QtCore.QObject):
             self.error.emit(f"串口发送失败: {exc}")
 
     def stop(self):
+        """由主线程调用，设置 _running=False 使 run() 循环退出。"""
         self._running = False
 
     def _close_serial(self):

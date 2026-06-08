@@ -11,6 +11,7 @@ from ui_rules import (
     get_diagnosis_style,
     get_lead_status_style,
     get_lead_status_text,
+    get_ui_state_copy,
     is_lead_connected,
     should_display_heart_rate,
 )
@@ -58,6 +59,27 @@ class UiRulesTest(unittest.TestCase):
         self.assertIn("border-radius", normal_style)
         self.assertIn("font-weight", normal_style)
         self.assertNotIn("临床诊断", normal_style)
+
+    def test_assistant_result_hint_copy_keeps_medical_boundary(self):
+        self.assertTrue(hasattr(ui_rules, "get_assistant_result_hint"))
+        forbidden_terms = ["最终诊断", "临床诊断", "临床处置", "分诊决策"]
+
+        hints = {
+            "empty": ui_rules.get_assistant_result_hint(None),
+            "normal": ui_rules.get_assistant_result_hint(0),
+            "abnormal": ui_rules.get_assistant_result_hint(1),
+            "unknown": ui_rules.get_assistant_result_hint("bad-index"),
+        }
+
+        self.assertEqual(hints["empty"], "等待 ECG 窗口完成后显示辅助提示")
+        self.assertIn("辅助提示", hints["normal"])
+        self.assertIn("正式判读前", hints["normal"])
+        self.assertIn("医生复核", hints["abnormal"])
+        self.assertIn("正式判读前", hints["abnormal"])
+        self.assertIn("模型契约", hints["unknown"])
+        for hint in hints.values():
+            for term in forbidden_terms:
+                self.assertNotIn(term, hint)
 
     def test_lead_status_rules(self):
         self.assertEqual(get_lead_status_text(0), "导联连接")
@@ -124,6 +146,48 @@ class UiRulesTest(unittest.TestCase):
         self.assertEqual(empty_values["diagnosis"], "0")
         self.assertEqual(empty_values["latency"], "0.0 ms")
         self.assertEqual(empty_values["throughput"], "0.0 点/s")
+
+    def test_ui_state_copy_covers_demo_flow(self):
+        ready = get_ui_state_copy("demo_ready", detail="固定场景 row=3 · 2000 点")
+        self.assertEqual(ready["badge"], "Demo 就绪")
+        self.assertEqual(ready["detail"], "固定场景 row=3 · 2000 点")
+        self.assertEqual(ready["hint"], "预检通过 · 等待自动启动")
+        self.assertEqual(ready["next_action"], "等待自动启动")
+
+        running = get_ui_state_copy("demo_running", detail="固定场景 row=3 · 2000 点")
+        self.assertEqual(running["badge"], "Demo 运行中")
+        self.assertEqual(running["hint"], "先确认波形、导联和心率，再查看 AI 辅助提示")
+        self.assertIn("最近摘要", get_ui_state_copy("demo_completed")["next_action"])
+
+    def test_ui_state_copy_uses_conservative_medical_language(self):
+        states = [
+            "idle",
+            "demo_ready",
+            "demo_starting",
+            "demo_running",
+            "inference_done",
+            "demo_completed",
+            "error",
+            "reset",
+        ]
+        forbidden_terms = ["最终诊断", "临床诊断", "临床处置", "分诊决策"]
+
+        for state in states:
+            copy = get_ui_state_copy(state)
+            combined = " ".join(copy.values())
+            self.assertIn("badge", copy)
+            self.assertIn("detail", copy)
+            self.assertIn("hint", copy)
+            self.assertIn("next_action", copy)
+            for term in forbidden_terms:
+                self.assertNotIn(term, combined)
+
+    def test_unknown_ui_state_falls_back_to_safe_copy(self):
+        copy = get_ui_state_copy("missing-state")
+
+        self.assertEqual(copy["badge"], "状态未知")
+        self.assertIn("辅助提示", copy["hint"])
+        self.assertIn("重置", copy["next_action"])
 
 
 if __name__ == "__main__":

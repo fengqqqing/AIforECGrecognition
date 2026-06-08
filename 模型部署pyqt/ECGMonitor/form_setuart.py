@@ -1,9 +1,7 @@
-# *_* coding : UTF-8 *_*
-# 开发团队 ：乐育科技
-# 开发人员 ：zcq
-# 开发时间 ：2022/6/14 18:17
-# 文件名称 ：form_setuart.PY 
-# 开发工具 ：PyCharm
+# 串口设置对话框模块
+# 职责：提供串口配置界面（端口号、波特率、数据位、停止位、校验位），
+#       用户点击"打开串口"后通过 serialSignal 将配置发送给主窗口。
+
 from PyQt5 import QtWidgets, QtGui
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QApplication

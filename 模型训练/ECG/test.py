@@ -1,3 +1,8 @@
+# 模型评估脚本
+# 职责：加载测试数据和模型，计算混淆矩阵、各类别 accuracy/precision/recall/F1，
+#       绘制 ROC 曲线和混淆矩阵热力图。
+# 注意：此脚本使用 best_acc.pth（PyTorch 权重），而非部署侧的 best_acc.pt（TorchScript）。
+
 import torch
 import numpy as np
 import matplotlib.pyplot as plt

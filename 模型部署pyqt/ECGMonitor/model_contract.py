@@ -1,8 +1,16 @@
+# 模型契约加载与校验模块
+# 职责：读取并验证模型契约 JSON 文件（如 best_acc.contract.json），
+#       确保必填字段齐全、字段值合法、模型文件实际存在。
+# 契约定义见 models/model_contract.schema.md。
+# 调用方：example.py（加载模型）、ecg_pipeline.py（获取窗口长度）、
+#         ParamMonitor.py（warmup 检查）、config.py（契约路径）。
+
 import json
 import os
 from pathlib import Path
 
 
+# 契约 JSON 中的必填字段路径列表（嵌套字段用元组表示）
 _REQUIRED_FIELDS = [
     ("contract_version",),
     ("model_name",),
@@ -21,6 +29,7 @@ _REQUIRED_FIELDS = [
 
 
 def load_model_contract(path):
+    """加载并校验模型契约 JSON，返回契约 dict。校验失败时抛出 ValueError 或 FileNotFoundError。"""
     with open(path, "r", encoding="utf-8") as f:
         contract = json.load(f)
     _validate_required_fields(contract)
@@ -29,6 +38,7 @@ def load_model_contract(path):
 
 
 def resolve_model_path(model_file, models_dir):
+    """将契约中的 model_file（相对路径）解析为绝对路径，且必须位于 models_dir 内。"""
     model_file_path = Path(model_file)
     if model_file_path.is_absolute():
         raise ValueError("模型契约字段 model_file 必须是相对 models/ 的路径")
@@ -45,6 +55,7 @@ def resolve_model_path(model_file, models_dir):
 
 
 def _validate_required_fields(contract):
+    """校验契约 JSON 中所有必填字段是否存在（支持嵌套字段）。"""
     for field_path in _REQUIRED_FIELDS:
         current = contract
         for field_name in field_path:
@@ -55,6 +66,7 @@ def _validate_required_fields(contract):
 
 
 def _validate_contract_values(contract, contract_path):
+    """校验契约字段值的合法性：版本、框架、设备、窗口、shape、归一化参数、标签数量。"""
     if contract["contract_version"] != 1:
         raise ValueError("模型契约字段 contract_version 必须为 1")
     if contract["framework"] != "torchscript":

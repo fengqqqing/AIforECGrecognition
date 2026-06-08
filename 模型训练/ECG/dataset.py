@@ -1,3 +1,10 @@
+# MIT-BIH 原始 ECG 数据加载模块（300 点窗口，5 分类）
+# 职责：从 MIT-BIH 原始记录（.dat/.hea/.atr）中读取 ECG 信号，按 R 波位置
+#       截取固定窗口（R 波前 100 + 后 200 = 300 点），生成训练/测试数据集。
+# 数据来源：artifacts/training/ecg/raw_data/ 下的 MIT-BIH 记录文件。
+# 注意：此模块为早期 300 点窗口版本，后续部署侧使用 2000 点窗口，
+#       对应 dataset_.py 中的 CSV 快速训练链路。
+
 import numpy as np
 import wfdb
 from draw import plot_signal
@@ -8,7 +15,7 @@ from paths import RAW_DATA_DIR
 
 # 读取心电数据和对应标签,并对数据进行小波去噪
 def getDataSet(number, X_data, Y_data):
-    ecgClassSet = ['N', 'A', 'V', 'L', 'R']                                     # 五种心电类型
+    ecgClassSet = ['N', 'A', 'V', 'L', 'R']  # 五种心电类型：正常/房早/室早/左束支/右束支
     print("正在读取 " + number + " 号心电数据...")
 
     # 绘制数字信号前1000个数据点
@@ -39,11 +46,11 @@ def getDataSet(number, X_data, Y_data):
             Y_data.append(lable)
             i += 1
         except ValueError:
-            i += 1
+            i += 1  # 跳过不在 ecgClassSet 中的心电类型
     return
 
 
-# 加载训练数据集并进行预处理
+# 加载训练数据集并进行预处理（36 个 MIT-BIH 记录，10% 验证集）
 def train_loadData():
     numberSet = ['100', '101', '103', '106', '107', '108', '109', '111', '112', '113', '114', '115',
                  '116', '117', '119', '122', '123', '124', '200', '201', '203', '205', '210', '212',
@@ -52,15 +59,15 @@ def train_loadData():
     lableSet = []
     for n in numberSet:
         getDataSet(n, dataSet, lableSet)                                # 读取心电数据和对应标签
-    dataSet = np.array(dataSet).reshape(-1, 300)                        # 数据集
-    lableSet = np.array(lableSet).reshape(-1, 1)                        # 标签集
-    train_ds = np.hstack((dataSet, lableSet))                           # 数据集和标签集合并
+    dataSet = np.array(dataSet).reshape(-1, 300)                        # 数据集 (N, 300)
+    lableSet = np.array(lableSet).reshape(-1, 1)                        # 标签集 (N, 1)
+    train_ds = np.hstack((dataSet, lableSet))                           # 数据集和标签集合并 (N, 301)
     np.random.shuffle(train_ds)                                         # 打乱顺序
 
-    X = train_ds[:, :300].reshape(-1, 300, 1)                           # 全部数据集数据
+    X = train_ds[:, :300].reshape(-1, 300, 1)                           # 全部数据集数据 (N, 300, 1)
     Y = train_ds[:, 300]                                                # 全部数据标签
-    shuffle_index = np.random.permutation(len(X))                       # 打乱顺序
-    val_length = int(0.1 * len(shuffle_index))                          # 验证集数量
+    shuffle_index = np.random.permutation(len(X))                       # 二次打乱索引
+    val_length = int(0.1 * len(shuffle_index))                          # 验证集占 10%
     val_index = shuffle_index[:val_length]
     train_index = shuffle_index[val_length:]
     X_val, Y_val = X[val_index], Y[val_index]                           # 验证集数据和标签

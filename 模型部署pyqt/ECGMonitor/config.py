@@ -1,3 +1,9 @@
+# 集中配置模块
+# 职责：定义项目路径常量、串口默认参数、UI 限制、重连策略、离线回放策略、
+#       Demo 回放策略和导出策略。所有模块通过 from config import ... 引用。
+# 注意：模型文件、窗口长度、归一化参数和标签顺序由模型契约（contract JSON）提供，
+#       本模块不再承载模型语义配置，避免双源漂移。
+
 import os
 
 
@@ -15,16 +21,17 @@ SERIAL_DEFAULTS = {
 }
 
 UI_LIMITS = {
-    "heart_rate_max": 350,
-    "wave_draw_threshold": 10,
+    "heart_rate_max": 350,       # 心率显示上限，超过则显示 "--"
+    "wave_draw_threshold": 10,   # 波形缓冲区积攒到此数量才触发绘制，减少 UI 刷新频率
 }
 
 RECONNECT_POLICY = {
     "enabled": True,
-    "interval_ms": 2000,
-    "max_attempts": 3,
+    "interval_ms": 2000,         # 断连后重连间隔（毫秒）
+    "max_attempts": 3,           # 最大自动重连次数
 }
 
+# 离线回放默认策略（可通过 GUI "回放设置" 对话框修改）
 OFFLINE_REPLAY_POLICY = {
     "input_csv": os.path.join(SAMPLE_DATA_DIR, "test.csv"),
     "source_type": "test_csv",
@@ -38,6 +45,7 @@ OFFLINE_REPLAY_POLICY = {
     "frame_sleep_ms": 1,
 }
 
+# Demo 回放策略：启动 --demo 时自动执行的固定场景回放（使用真实模型推理）
 DEMO_REPLAY_POLICY = {
     "input_csv": os.path.join(SAMPLE_DATA_DIR, "test.csv"),
     "source_type": "test_csv",
@@ -66,6 +74,7 @@ DEMO_REPLAY_POLICY = {
     },
 }
 
+# 运行导出策略：指标、诊断和回放文件的输出目录和时间戳格式
 EXPORT_POLICY = {
     "enabled": True,
     "runs_dir": RUNS_DIR,

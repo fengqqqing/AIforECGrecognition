@@ -41,6 +41,9 @@ artifacts/training/ecg/models/*.pt
 artifacts/**/tmp/
 artifacts/**/*.log
 
+# Local Understand-Anything analysis output
+.understand-anything/
+
 # OS/local noise
 .DS_Store
 Thumbs.db
